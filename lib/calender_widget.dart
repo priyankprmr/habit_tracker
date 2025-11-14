@@ -15,49 +15,42 @@ class CalenderWidget extends ConsumerStatefulWidget {
 }
 
 class _CalenderWidgetState extends ConsumerState<CalenderWidget> {
-  late List<DateTime> _dates;
-  late ScrollController _scrollController;
   late PageController _pageController;
-  final int _initialIndex = 90;
-
-  double get scrollOffset {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final tileWidth = screenWidth / 7;
-    return _initialIndex * tileWidth;
-  }
+  late List<List<DateTime>> _weekPages;
+  late int _initialPage;
 
   @override
   void initState() {
     super.initState();
-    _generateDates();
-    _scrollController = ScrollController();
-    _pageController = PageController();
-    // Scroll to today after build
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToToday();
-    });
+    _generateWeekPages();
+    _pageController = PageController(initialPage: _initialPage);
   }
 
-  void _generateDates() {
+  void _generateWeekPages() {
     final today = DateTime.now();
-    _dates = List.generate(
-      121,
-      (index) => today.subtract(Duration(days: 90 - index)),
-    );
-  }
+    final normalizedToday = DateTime(today.year, today.month, today.day);
 
-  void _scrollToToday() {
-    // _pageController.animateToPage(page, duration: duration, curve: curve)
-    _pageController.animateTo(
-      scrollOffset,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
+    // Find the start of current week (assuming week starts on Monday)
+    final currentWeekStart = normalizedToday.subtract(
+      Duration(days: normalizedToday.weekday - 1),
     );
+
+    // Generate 52 weeks (26 past weeks + current week + 25 future weeks)
+    _weekPages = [];
+    for (int i = -26; i <= 25; i++) {
+      final weekStart = currentWeekStart.add(Duration(days: i * 7));
+      final week = List.generate(
+        7,
+        (day) => weekStart.add(Duration(days: day)),
+      );
+      _weekPages.add(week);
+    }
+
+    _initialPage = 26; // Current week is at index 26
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -65,26 +58,34 @@ class _CalenderWidgetState extends ConsumerState<CalenderWidget> {
   @override
   Widget build(BuildContext context) {
     final selectedDate = ref.watch(selectedDateProvider);
-    // final screenWidth = MediaQuery.of(context).size.width;
-    // final tileWidth = screenWidth / 7;
 
     return Container(
       height: 90,
+
+      decoration: BoxDecoration(
+        color: Colors.yellow,
+        borderRadius: BorderRadius.circular(12),
+      ),
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: PageView.builder(
         controller: _pageController,
-        scrollDirection: Axis.horizontal,
-        itemCount: _dates.length,
-        itemBuilder: (context, index) {
-          final date = _dates[index];
-          return DateTile(
-            // width: tileWidth,
-            date: date,
-            isSelected: _isSameDay(date, selectedDate),
-            isToday: _isSameDay(date, DateTime.now()),
-            onTap: () {
-              ref.read(selectedDateProvider.notifier).state = date;
-            },
+        itemCount: _weekPages.length,
+        itemBuilder: (context, pageIndex) {
+          final weekDates = _weekPages[pageIndex];
+
+          return Row(
+            children: weekDates.map((date) {
+              return Expanded(
+                child: DateTile(
+                  date: date,
+                  isSelected: _isSameDay(date, selectedDate),
+                  isToday: _isSameDay(date, DateTime.now()),
+                  onTap: () {
+                    ref.read(selectedDateProvider.notifier).state = date;
+                  },
+                ),
+              );
+            }).toList(),
           );
         },
       ),
